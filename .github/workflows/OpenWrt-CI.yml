@@ -45,12 +45,13 @@ jobs:
           sudo timedatectl set-timezone "Asia/Shanghai"
       - name: Update feeds
         run: |
+          sudo chown -R runner:runner /home/runner/work/openwrt
           rm -rf ./package/lean/luci-theme-argon
           rm -rf ./package/lean/trojan
           rm -rf ./package/lean/luci-lib-docker
           rm -rf ./package/lean/luci-theme-opentomcat
           rm -rf ./package/lean/luci-app-netdata
-          sed -i '$a helloworld https://github.com/fw876/helloworld/g' ./feeds.conf.default
+          sed -i '$a src-git  helloworld https://github.com/fw876/helloworld' ./feeds.conf.default
           sed -i '$a src-git diy https://github.com/siropboy/mypackages' ./feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
