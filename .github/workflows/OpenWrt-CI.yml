@@ -3,7 +3,7 @@
 # Author: sirpdboy
 # https://github.com/sirpdboy/Openwrt
 
-name: Sirpdboy-OpenWrt-Lean-ipv4-mini-CI
+name: OpenWrt-CI
 on:
   push:
     branches: 
@@ -267,7 +267,7 @@ jobs:
        uses: actions/upload-artifact@master
        with:
           name: SirpdboyOpenWrt-IPV4-mini-Firmware
-          path: ./openwrt/bin/targets/
+          path: ./openwrt/bin/targets/x86/64
           
      - name: Upload  IPK
        uses: actions/upload-artifact@master
