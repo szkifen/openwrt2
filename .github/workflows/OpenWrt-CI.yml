@@ -52,7 +52,7 @@ jobs:
           ./scripts/feeds update -a
       - name: Update package
         run: |
-          curl -fsSL https://raw.githubusercontent.com/siropboy/other/master/patch/script/diy2.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/siropboy/other/master/patch/script/initset.sh | sh
           ./scripts/feeds install -a
       - name: Generate configuration file
         run: |
