@@ -755,7 +755,7 @@ define Device/thunder_timecloud
   IMAGE_SIZE := 16064k
   DEVICE_VENDOR := Thunder
   DEVICE_MODEL := Timecloud
-  DEVICE_PACKAGES := kmod-usb3
+  DEVICE_PACKAGES := kmod-usb3 kmod-sdhci-mt7620
   SUPPORTED_DEVICES += timecloud
 endef
 TARGET_DEVICES += thunder_timecloud
@@ -992,7 +992,7 @@ define Device/youku_yk-l2
   IMAGE_SIZE := 16064k
   DEVICE_VENDOR := Youku
   DEVICE_MODEL := YK-L2
-  DEVICE_PACKAGES := kmod-mt7603 kmod-mt76x2 kmod-usb3 \
+  DEVICE_PACKAGES := kmod-mt7603 kmod-mt76x2 kmod-usb3 kmod-sdhci-mt7620 \
 	kmod-usb-ledtrig-usbport wpad-openssl
 endef
 TARGET_DEVICES += youku_yk-l2

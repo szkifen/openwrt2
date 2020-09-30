@@ -14,6 +14,7 @@ e.rmempty = false
 t = m:section(TypedSection, "user", translate("Users Manager"))
 t.anonymous = true
 t.addremove = true
+t.sortable = true
 t.template = "cbi/tblsection"
 t.extedit = d.build_url("admin", "services", "passwall", "server_user", "%s")
 function t.create(e, t)
@@ -33,8 +34,10 @@ e.width = "5%"
 e.rmempty = false
 
 e = t:option(DummyValue, "status", translate("Status"))
-e.template = "passwall/server/users_status"
-e.value = translate("Collecting data...")
+e.rawhtml = true
+e.cfgvalue = function(t, n)
+    return string.format('<font class="_users_status">%s</font>', translate("Collecting data..."))
+end
 
 e = t:option(DummyValue, "remarks", translate("Remarks"))
 e.width = "15%"

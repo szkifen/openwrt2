@@ -158,6 +158,7 @@ define Build/fit
 		-D $(DEVICE_NAME) -o $@.its -k $@ \
 		$(if $(word 2,$(1)),-d $(word 2,$(1))) -C $(word 1,$(1)) \
 		-a $(KERNEL_LOADADDR) -e $(if $(KERNEL_ENTRY),$(KERNEL_ENTRY),$(KERNEL_LOADADDR)) \
+		$(if $(DEVICE_FDT_NUM),-n $(DEVICE_FDT_NUM)) \
 		-c $(if $(DEVICE_DTS_CONFIG),$(DEVICE_DTS_CONFIG),"config@1") \
 		-A $(LINUX_KARCH) -v $(LINUX_VERSION)
 	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
@@ -305,6 +306,13 @@ define Build/openmesh-image
 		"$(call param_get_default,rootfs,$(1),$@)" "rootfs"
 endef
 
+define Build/qsdk-ipq-factory-mmc
+	$(TOPDIR)/scripts/mkits-qsdk-ipq-image.sh \
+		$@.its kernel $(IMAGE_KERNEL) rootfs $(IMAGE_ROOTFS)
+	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
+	@mv $@.new $@
+endef
+
 define Build/qsdk-ipq-factory-nand
 	$(TOPDIR)/scripts/mkits-qsdk-ipq-image.sh \
 		$@.its ubi $@
@@ -314,7 +322,7 @@ endef
 
 define Build/qsdk-ipq-factory-nor
 	$(TOPDIR)/scripts/mkits-qsdk-ipq-image.sh \
-		$@.its kernel $(IMAGE_KERNEL) rootfs $(IMAGE_ROOTFS)
+		$@.its hlos $(IMAGE_KERNEL) rootfs $(IMAGE_ROOTFS)
 	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
 	@mv $@.new $@
 endef
