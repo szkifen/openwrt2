@@ -31,7 +31,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/setup-node@openwrt-18.06
         with:
           ref: openwrt-18.06
       - name: Space cleanup
