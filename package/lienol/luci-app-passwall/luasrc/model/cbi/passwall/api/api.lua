@@ -3,6 +3,7 @@ local fs = require "nixio.fs"
 local sys = require "luci.sys"
 local uci = require"luci.model.uci".cursor()
 local util = require "luci.util"
+local datatypes = require "luci.cbi.datatypes"
 local i18n = require "luci.i18n"
 
 appname = "passwall"
@@ -14,8 +15,38 @@ command_timeout = 300
 LEDE_BOARD = nil
 DISTRIB_TARGET = nil
 
-function gen_uuid()
-    local uuid = string.gsub(sys.exec("echo -n $(cat /proc/sys/kernel/random/uuid)"), "-", "")
+function get_valid_nodes()
+    local nodes = {}
+    uci:foreach(appname, "nodes", function(e)
+        if e.type and e.remarks then
+            if e.type == "V2ray" and (e.protocol == "_balancing" or e.protocol == "_shunt") then
+                e.remarks_name = "%s：[%s] " % {i18n.translatef(e.type .. e.protocol), e.remarks}
+                e.node_type = "special"
+                nodes[#nodes + 1] = e
+            end
+            if e.port and e.address then
+                local address = e.address
+                if datatypes.ipaddr(address) or datatypes.hostname(address) then
+                    local address2 = address
+                    if datatypes.ip6addr(address) then address2 = "[" .. address .. "]" end
+                    e.remarks_name = "%s：[%s] %s:%s" % {e.type, e.remarks, address2, e.port}
+                    if e.use_kcp and e.use_kcp == "1" then
+                    e.remarks_name = "%s+%s：[%s] %s" % {e.type, "Kcptun", e.remarks, address2}
+                    end
+                    e.node_type = "normal"
+                    nodes[#nodes + 1] = e
+                end
+            end
+        end
+    end)
+    return nodes
+end
+
+function gen_uuid(format)
+    local uuid = sys.exec("echo -n $(cat /proc/sys/kernel/random/uuid)")
+    if format == nil then
+        uuid = string.gsub(uuid, "-", "")
+    end
     return uuid
 end
 

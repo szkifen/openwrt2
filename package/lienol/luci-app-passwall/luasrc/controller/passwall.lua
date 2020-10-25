@@ -3,6 +3,7 @@ module("luci.controller.passwall", package.seeall)
 local appname = "passwall"
 local ucic = luci.model.uci.cursor()
 local http = require "luci.http"
+local util = require "luci.util"
 local kcptun = require "luci.model.cbi.passwall.api.kcptun"
 local brook = require "luci.model.cbi.passwall.api.brook"
 local v2ray = require "luci.model.cbi.passwall.api.v2ray"
@@ -47,6 +48,7 @@ function index()
 	entry({"admin", "services", appname, "link_load_temp"}, call("link_load_temp")).leaf = true
 	entry({"admin", "services", appname, "link_clear_temp"}, call("link_clear_temp")).leaf = true
 	entry({"admin", "services", appname, "link_add_node"}, call("link_add_node")).leaf = true
+	entry({"admin", "services", appname, "get_now_use_node"}, call("get_now_use_node")).leaf = true
 	entry({"admin", "services", appname, "get_log"}, call("get_log")).leaf = true
 	entry({"admin", "services", appname, "clear_log"}, call("clear_log")).leaf = true
 	entry({"admin", "services", appname, "status"}, call("status")).leaf = true
@@ -124,6 +126,28 @@ function link_add_node()
 	luci.sys.call("lua /usr/share/passwall/subscribe.lua add log")
 end
 
+function get_now_use_node()
+	local e = {}
+	local tcp_node_num = ucic:get(appname, "@global_other[0]", "tcp_node_num") or 1
+	e.tcp = tonumber(tcp_node_num)
+	for i = 1, tcp_node_num, 1 do
+		local data, code, msg = nixio.fs.readfile("/var/etc/passwall/id/TCP_" .. i)
+		if data then
+			e["TCP" .. i] = util.trim(data)
+		end
+	end
+	local udp_node_num = ucic:get(appname, "@global_other[0]", "udp_node_num") or 1
+	e.udp = tonumber(udp_node_num)
+	for i = 1, udp_node_num, 1 do
+		local data, code, msg = nixio.fs.readfile("/var/etc/passwall/id/UDP_" .. i)
+		if data then
+			e["UDP" .. i] = util.trim(data)
+		end
+	end
+	luci.http.prepare_content("application/json")
+	luci.http.write_json(e)
+end
+
 function get_log()
 	-- luci.sys.exec("[ -f /var/log/passwall.log ] && sed '1!G;h;$!d' /var/log/passwall.log > /var/log/passwall_show.log")
 	luci.http.write(luci.sys.exec("[ -f '/var/log/passwall.log' ] && cat /var/log/passwall.log"))
@@ -161,7 +185,13 @@ function socks_status()
 	local index = luci.http.formvalue("index")
 	local id = luci.http.formvalue("id")
 	e.index = index
-	e.status = luci.sys.call(string.format("ps -w | grep -v grep | grep '%s/bin/' | grep 'SOCKS_%s' > /dev/null", appname, id)) == 0
+	e.socks_status = luci.sys.call(string.format("ps -w | grep -v grep | grep '%s/bin/' | grep 'SOCKS_%s' > /dev/null", appname, id)) == 0
+	local use_http = ucic:get(appname, id, "http_port") or 0
+	e.use_http = 0
+	if tonumber(use_http) > 0 then
+		e.use_http = 1
+		e.http_status = luci.sys.call(string.format("ps -w | grep -v grep | grep '%s/bin/' | grep 'SOCKS2HTTP_%s' > /dev/null", appname, id)) == 0
+	end
 	luci.http.prepare_content("application/json")
 	luci.http.write_json(e)
 end

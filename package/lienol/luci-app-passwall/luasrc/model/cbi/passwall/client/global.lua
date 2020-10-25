@@ -4,24 +4,12 @@ local api = require "luci.model.cbi.passwall.api.api"
 local appname = "passwall"
 
 local nodes_table = {}
-uci:foreach(appname, "nodes", function(e)
-    if e.type and e.remarks then
-        local remarks = ""
-        if e.type == "V2ray" and (e.protocol == "_balancing" or e.protocol == "_shunt") then
-            remarks = "%s：[%s] " % {translatef(e.type .. e.protocol), e.remarks}
-        else
-            if e.use_kcp and e.use_kcp == "1" then
-                remarks = "%s+%s：[%s] %s" % {e.type, "Kcptun", e.remarks, e.address}
-            else
-                remarks = "%s：[%s] %s:%s" % {e.type, e.remarks, e.address, e.port}
-            end
-        end
-        nodes_table[#nodes_table + 1] = {
-            id = e[".name"],
-            remarks = remarks
-         }
-    end
-end)
+for k, e in ipairs(api.get_valid_nodes()) do
+    nodes_table[#nodes_table + 1] = {
+        id = e[".name"],
+        remarks = e.remarks_name
+    }
+end
 
 local socks_table = {}
 uci:foreach(appname, "socks", function(s)
@@ -44,6 +32,28 @@ uci:foreach(appname, "socks", function(s)
         }
     end
 end)
+
+local doh_validate = function(self, value, t)
+    if value ~= "" then
+        local flag = 0
+        local util = require "luci.util"
+        local val = util.split(value, ",")
+        local url = val[1]
+        val[1] = nil
+        for i = 1, #val do
+            local v = val[i]
+            if v then
+                if not datatypes.ipmask4(v) then
+                    flag = 1
+                end
+            end
+        end
+        if flag == 0 then
+            return value
+        end
+    end
+    return nil, translate("DoH request address") .. " " .. translate("Format must be:") .. " URL,IP"
+end
 
 m = Map(appname)
 local status = m:get("@global_other[0]", "status") or ""
@@ -143,10 +153,10 @@ o:value("180.76.76.76", "180.76.76.76 (" .. translate("Baidu") .. "DNS)")
 
 ---- DoH
 o = s:taboption("DNS", Value, "up_china_dns_doh", translate("DoH request address"))
-o.description = translate("When custom, Please follow the format strictly:") .. "<br />" .. "https://dns.alidns.com/dns-query,223.5.5.5,223.6.6.6<br />" .. "https://doh.pub/dns-query,119.29.29.29"
 o:value("https://dns.alidns.com/dns-query,223.5.5.5,223.6.6.6", "AliDNS")
 o:value("https://doh.pub/dns-query,119.29.29.29,119.28.28.28", "DNSPod")
 o.default = "https://dns.alidns.com/dns-query,223.5.5.5,223.6.6.6"
+o.validate = doh_validate
 o:depends("up_china_dns", "https-dns-proxy")
 
 ---- DNS Forward Mode
@@ -169,6 +179,13 @@ o:value("custom", translate("Custom DNS"))
 ---- Custom DNS
 o = s:taboption("DNS", Value, "custom_dns", translate("Custom DNS"))
 o.default = "127.0.0.1#5353"
+o.validate = function(self, value, t)
+    local v = string.gsub(value, "#", ":")
+    if not datatypes.ipaddrport(v) then
+        return nil, translate("Custom DNS") .. " " .. translate("Not valid IP format, please re-enter!")
+    end
+    return value
+end
 o:depends({dns_mode = "custom"})
 
 o = s:taboption("DNS", ListValue, "up_trust_pdnsd_dns", translate("Resolver For The List Proxied"))
@@ -185,12 +202,17 @@ o:depends("dns_mode", "https-dns-proxy")
 
 o = s:taboption("DNS", Value, "socks_server", translate("Socks Server"), translate("Make sure socks service is available on this address."))
 for k, v in pairs(socks_table) do o:value(v.id, v.remarks) end
+o.validate = function(self, value, t)
+    if not datatypes.ipaddrport(value) then
+        return nil, translate("Socks Server") .. " " .. translate("Not valid IP format, please re-enter!")
+    end
+    return value
+end
 o:depends({dns_mode = "dns2socks"})
 o:depends({dns_mode = "https-dns-proxy", up_trust_doh_dns = "socks"})
 
 ---- DoH
 o = s:taboption("DNS", Value, "up_trust_doh", translate("DoH request address"))
-o.description = translate("When custom, Please follow the format strictly:") .. "<br />" .. "https://dns.google/dns-query,8.8.8.8,8.8.4.4<br />" .. "https://doh.opendns.com/dns-query,208.67.222.222"
 o:value("https://dns.adguard.com/dns-query,176.103.130.130,176.103.130.131", "AdGuard")
 o:value("https://cloudflare-dns.com/dns-query,1.1.1.1,1.0.0.1", "Cloudflare")
 o:value("https://security.cloudflare-dns.com/dns-query,1.1.1.2,1.0.0.2", "Cloudflare-Security")
@@ -200,6 +222,7 @@ o:value("https://doh.libredns.gr/dns-query,116.202.176.26", "LibreDNS")
 o:value("https://doh.libredns.gr/ads,116.202.176.26", "LibreDNS (No Ads)")
 o:value("https://dns.quad9.net/dns-query,9.9.9.9,149.112.112.112", "Quad9-Recommended")
 o.default = "https://dns.google/dns-query,8.8.8.8,8.8.4.4"
+o.validate = doh_validate
 o:depends({dns_mode = "https-dns-proxy"})
 
 ---- DNS Forward
@@ -291,7 +314,7 @@ end
 o = s:option(DummyValue, "status", translate("Status"))
 o.rawhtml = true
 o.cfgvalue = function(t, n)
-    return string.format('<font class="_status" socks_id="%s"></font>', n)
+    return string.format('<div class="_status" socks_id="%s"></div>', n)
 end
 
 ---- Enable
@@ -306,10 +329,16 @@ for i = 1, tcp_node_num, 1 do
 end
 for k, v in pairs(nodes_table) do o:value(v.id, v.remarks) end
 
-o = s:option(Value, "port", translate("Listen Port"))
+o = s:option(Value, "port", "Socks" .. translate("Listen Port"))
 o.default = 9050
 o.datatype = "port"
 o.rmempty = false
+
+if api.is_finded("v2ray") then
+    o = s:option(Value, "http_port", "HTTP" .. translate("Listen Port") .. " " .. translate("0 is not use"))
+    o.default = 0
+    o.datatype = "port"
+end
 
 m:append(Template(appname .. "/global/footer"))
 

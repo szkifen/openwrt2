@@ -14,6 +14,7 @@ function gen_config(user)
             for i = 1, #user.uuid do
                 clients[i] = {
                     id = user.uuid[i],
+                    flow = (user.xtls and user.xtls == "1") and user.flow or nil,
                     level = tonumber(user.level),
                     alterId = tonumber(user.alter_id)
                 }
@@ -25,32 +26,46 @@ function gen_config(user)
         end
     elseif user.protocol == "socks" then
         settings = {
-            auth = (user.username == nil and user.password == nil) and "noauth" or "password",
-            accounts = {
+            auth = (user.auth and user.auth == "1") and "password" or "noauth",
+            accounts = (user.auth and user.auth == "1") and {
                 {
-                    user = (user.username == nil) and "" or user.username,
-                    pass = (user.password == nil) and "" or user.password
+                    user = user.username,
+                    pass = user.password
                 }
             }
         }
     elseif user.protocol == "http" then
         settings = {
             allowTransparent = false,
-            accounts = {
+            accounts = (user.auth and user.auth == "1") and {
                 {
-                    user = (user.username == nil) and "" or user.username,
-                    pass = (user.password == nil) and "" or user.password
+                    user = user.username,
+                    pass = user.password
                 }
             }
         }
+        user.transport = "tcp"
+        user.tcp_guise = "none"
     elseif user.protocol == "shadowsocks" then
         settings = {
             method = user.method,
             password = user.password,
             level = tonumber(user.level) or 1,
-            network = user.ss_network or "TCP,UDP",
-            ota = (user.ss_ota == '1') and true or false
+            network = user.ss_network or "TCP,UDP"
         }
+    elseif user.protocol == "trojan" then
+        if user.uuid then
+            local clients = {}
+            for i = 1, #user.uuid do
+                clients[i] = {
+                    password = user.uuid[i],
+                    level = tonumber(user.level)
+                }
+            end
+            settings = {
+                clients = clients
+            }
+        end
     elseif user.protocol == "mtproto" then
         settings = {
             users = {
@@ -74,101 +89,9 @@ function gen_config(user)
     }
 
     if user.transit_node and user.transit_node ~= "nil" then
-        local node = ucic:get_all("passwall", user.transit_node)
-        if node and node ~= "nil" and node.type and node.type == "V2ray" then
-            if node.transport == "mkcp" or node.transport == "ds" or node.transport == "quic" then
-                node.stream_security = "none"
-            end
-            local transit_node = {
-                tag = "transit",
-                protocol = node.protocol,
-                mux = {
-                    enabled = (node.mux == "1") and true or false,
-                    concurrency = (node.mux_concurrency) and tonumber(node.mux_concurrency) or 8
-                },
-                -- 底层传输配置
-                streamSettings = {
-                    network = node.transport,
-                    security = node.stream_security,
-                    tlsSettings = (node.stream_security == "tls") and {
-                        disableSessionResumption = node.sessionTicket ~= "1" and true or false,
-                        serverName = node.tls_serverName,
-                        allowInsecure = (node.tls_allowInsecure == "1") and true or false
-                    } or nil,
-                    tcpSettings = (node.transport == "tcp") and {
-                        header = {
-                            type = node.tcp_guise,
-                            request = {
-                                path = node.tcp_guise_http_path or {"/"},
-                                headers = {
-                                    Host = node.tcp_guise_http_host or {}
-                                }
-                            } or {}
-                        }
-                    } or nil,
-                    kcpSettings = (node.transport == "mkcp") and {
-                        mtu = tonumber(node.mkcp_mtu),
-                        tti = tonumber(node.mkcp_tti),
-                        uplinkCapacity = tonumber(node.mkcp_uplinkCapacity),
-                        downlinkCapacity = tonumber(node.mkcp_downlinkCapacity),
-                        congestion = (node.mkcp_congestion == "1") and true or false,
-                        readBufferSize = tonumber(node.mkcp_readBufferSize),
-                        writeBufferSize = tonumber(node.mkcp_writeBufferSize),
-                        seed = (node.mkcp_seed and node.mkcp_seed ~= "") and node.mkcp_seed or nil,
-                        header = {type = node.mkcp_guise}
-                    } or nil,
-                    wsSettings = (node.transport == "ws") and {
-                        path = node.ws_path or "",
-                        headers = (node.ws_host ~= nil) and {Host = node.ws_host} or nil
-                    } or nil,
-                    httpSettings = (node.transport == "h2") and {
-                        path = node.h2_path, host = node.h2_host
-                    } or nil,
-                    dsSettings = (node.transport == "ds") and {
-                        path = node.ds_path
-                    } or nil,
-                    quicSettings = (node.transport == "quic") and {
-                        security = node.quic_security,
-                        key = node.quic_key,
-                        header = {type = node.quic_guise}
-                    } or nil
-                },
-                settings = {
-                    vnext = (node.protocol == "vmess" or node.protocol == "vless") and {
-                        {
-                            address = node.address,
-                            port = tonumber(node.port),
-                            users = {
-                                {
-                                    id = node.uuid,
-                                    alterId = tonumber(node.alter_id),
-                                    level = node.level and tonumber(node.level) or 0,
-                                    security = node.security,
-                                    encryption = node.encryption or "none"
-                                }
-                            }
-                        }
-                    } or nil,
-                    servers = (node.protocol == "http" or node.protocol == "socks" or node.protocol == "shadowsocks") and {
-                        {
-                            address = node.address,
-                            port = tonumber(node.port),
-                            method = node.v_ss_encrypt_method,
-                            password = node.password or "",
-                            ota = (node.ss_ota == '1') and true or false,
-                            users = (node.username and node.password) and
-                                {
-                                    {
-                                        user = node.username or "",
-                                        pass = node.password or ""
-                                    }
-                                } or nil
-                        }
-                    } or nil
-                }
-            }
-            table.insert(outbounds, 1, transit_node)
-        end
+        local gen_v2ray = require("luci.model.cbi.passwall.api.gen_v2ray")
+        local client = gen_v2ray.gen_outbound(ucic:get_all("passwall", user.transit_node), "transit")
+        table.insert(outbounds, 1, client)
     end
 
     local config = {
@@ -185,10 +108,18 @@ function gen_config(user)
                 settings = settings,
                 streamSettings = {
                     network = user.transport,
-                    security = (user.stream_security == 'tls') and "tls" or "none",
-                    tlsSettings = (user.stream_security == 'tls') and {
-                        disableSessionResumption = user.sessionTicket ~= "1" and true or false,
-                        allowInsecure = false,
+                    security = "none",
+                    xtlsSettings = (user.tls and user.tls == "1" and user.xtls and user.xtls == "1") and {
+                        --alpn = {"http/1.1"},
+                        disableSystemRoot = false,
+                        certificates = {
+                            {
+                                certificateFile = user.tls_certificateFile,
+                                keyFile = user.tls_keyFile
+                            }
+                        }
+                    } or nil,
+                    tlsSettings = (user.tls and user.tls == "1") and {
                         disableSystemRoot = false,
                         certificates = {
                             {
@@ -200,12 +131,12 @@ function gen_config(user)
                     tcpSettings = (user.transport == "tcp") and {
                         header = {
                             type = user.tcp_guise,
-                            request = {
+                            request = (user.tcp_guise == "http") and {
                                 path = user.tcp_guise_http_path or {"/"},
                                 headers = {
                                     Host = user.tcp_guise_http_host or {}
                                 }
-                            } or {}
+                            } or nil
                         }
                     } or nil,
                     kcpSettings = (user.transport == "mkcp") and {
@@ -220,6 +151,7 @@ function gen_config(user)
                         header = {type = user.mkcp_guise}
                     } or nil,
                     wsSettings = (user.transport == "ws") and {
+                        acceptProxyProtocol = false,
                         headers = (user.ws_host) and {Host = user.ws_host} or nil,
                         path = user.ws_path
                     } or nil,
@@ -242,7 +174,15 @@ function gen_config(user)
         routing = routing
     }
 
-    if user.transport == "mkcp" or user.transport == "ds" or user.transport == "quic" then
+    if user.tls and user.tls == "1" then
+        config.inbounds[1].streamSettings.security = "tls"
+        if user.xtls and user.xtls == "1" then
+            config.inbounds[1].streamSettings.security = "xtls"
+            config.inbounds[1].streamSettings.tlsSettings = nil
+        end
+    end
+
+    if user.transport == "mkcp" or user.transport == "quic" then
         config.inbounds[1].streamSettings.security = "none"
         config.inbounds[1].streamSettings.tlsSettings = nil
     end

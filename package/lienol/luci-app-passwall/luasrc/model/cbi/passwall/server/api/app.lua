@@ -69,16 +69,17 @@ local function start()
             local udp_forward = 1
             local type = user.type or ""
             if type == "Socks" then
-                local port = user.port
-                local username = user.username
-                local password = user.password
-                if username and password then
-                    local auth_file = CONFIG_PATH .. "/" .. id .. ".auth"
-                    cmd(string.format('echo %s:%s > %s', username, password, auth_file))
-                    bin = ln_start("/usr/bin/ssocksd", "ssocksd_" .. id, "-p " .. port .. " -a " .. auth_file)
-                else
-                    bin = ln_start("/usr/bin/ssocksd", "ssocksd_" .. id, "-p " .. port)
+                local auth = ""
+                if user.auth and user.auth == "1" then
+                    local username = user.username or ""
+                    local password = user.password or ""
+                    if username ~= "" and password ~= "" then
+                        username = "-u " .. username
+                        password = "-P " .. password
+                        auth = username .. " " .. password
+                    end
                 end
+                bin = ln_start("/usr/bin/microsocks", "microsocks_" .. id, string.format("-i :: -p %s %s", port, auth))
             elseif type == "SS" or type == "SSR" then
                 config = require("luci.model.cbi.passwall.server.api.shadowsocks").gen_config(user)
                 local udp_param = ""
